@@ -211,7 +211,7 @@ void myftpGet(int sd, char *filename)
 			while (1)
 			{
 				memset(&payload, 0, Buffer_Size + 1);
-				if ((file_data_len = recv(sd, &payload, Buffer_Size)) < 0)
+				if ((file_data_len = recv(sd, &payload, Buffer_Size, 0)) < 0)
 				{
 					printf("Send error: %s (Errno:%d)\n", strerror(errno), errno);
 					break;
