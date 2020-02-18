@@ -69,20 +69,25 @@ int recvn(int sd, void *buf, int buf_len)
 	return buf_len;
 }
 
-int check_myftp(unsigned char ptc[]){
-	if( (ptc[0] != 'm') || (ptc[1] != 'y') || (ptc[2] != 'f') || (ptc[3] != 't')|| (ptc[4] != 'p')){
+int check_myftp(unsigned char ptc[])
+{
+	if ((ptc[0] != 'm') || (ptc[1] != 'y') || (ptc[2] != 'f') || (ptc[3] != 't') || (ptc[4] != 'p'))
+	{
 		return -1;
 	}
 	return 0;
 }
 
-void display_header(struct message_s header){
+void display_header(struct message_s header)
+{
 	//Display header information
-	if(check_myftp(header.protocol) == 0){
+	if (check_myftp(header.protocol) == 0)
+	{
 		printf("This is MYFTP header\n");
 	}
 	printf("  Protocol : ");
-	for(int i = 0; i < sizeof(header.protocol); i++){
+	for (int i = 0; i < sizeof(header.protocol); i++)
+	{
 		printf("%c", header.protocol[i]);
 	}
 	printf("\n");
@@ -91,44 +96,52 @@ void display_header(struct message_s header){
 }
 
 //Added List function
-void MESSAGE_TO_CLIENT(int clientsd,struct message_s Header,char * payload){
-	struct packet* SEND_MESSAGE;
+void MESSAGE_TO_CLIENT(int clientsd, struct message_s Header, char *payload)
+{
+	struct packet *SEND_MESSAGE;
 	SEND_MESSAGE = malloc(sizeof(struct message_s));
-	SEND_MESSAGE->header=Header;
-	if(payload!=NULL){
-		SEND_MESSAGE = realloc(SEND_MESSAGE,10+strlen(payload));
-		memcpy(SEND_MESSAGE->payload,payload,Header.length-12);
+	SEND_MESSAGE->header = Header;
+	if (payload != NULL)
+	{
+		SEND_MESSAGE = realloc(SEND_MESSAGE, 10 + strlen(payload));
+		memcpy(SEND_MESSAGE->payload, payload, Header.length - 10);
 	}
-	if(sendn(clientsd,SEND_MESSAGE, Header.length) < 0){
-		printf("Send error: %s (Errno:%d)\n",strerror(errno),errno);
+	if (sendn(clientsd, SEND_MESSAGE, Header.length) < 0)
+	{
+		printf("Send error: %s (Errno:%d)\n", strerror(errno), errno);
 		exit(0);
-	}	
+	}
 	free(SEND_MESSAGE);
 }
 
-void LIST(int clientsd , struct packet RECEIVE_MESSAGE){
-	printf("110");
-	
-	struct message_s LS_REPLY={.protocol={'m','y','f','t','p'},.type=0xA2};
-	char payload[1024];
-	memset(payload,0,1);
+void LIST(int clientsd, struct packet RECEIVE_MESSAGE)
+{
+	//printf("110");
 
-	DIR * dirp = opendir("data");
-	if((dirp = opendir("data"))== NULL){
+	struct message_s LS_REPLY = {.protocol = {'m', 'y', 'f', 't', 'p'}, .type = 0xA2};
+	char payload[1024];
+	memset(payload, 0, 1);
+
+	DIR *dirp;
+	if ((dirp = opendir("data")) == NULL)
+	{
 		perror("Open directory Error");
-	}
-	printf("Directory Stream is now open");
-	struct dirent * entry;
-	int i = 0;
-	while((entry=readdir(dirp))){
-		i++;
-		printf("\n%s",entry->d_name);
-		strcat(payload,entry->d_name);
-		strcat(payload,"\n");
+		exit(0);
+	};
+	
+	//printf("Directory Stream is now open");
+	struct dirent *entry;
+	// int i = 0;
+	while ((entry = readdir(dirp)))
+	{
+		// i++;
+		printf("%s\n", entry->d_name);
+		strcat(payload, entry->d_name);
+		strcat(payload, "\n");
 	}
 	closedir(dirp);
-	printf("\n\n readdir() found a total of %i files\n",i);
-	printf("The payload is %s",payload);
+	//printf("\n\n readdir() found a total of %i files\n", i);
+	//printf("The payload is %s", payload);
 	/*
 	struct dirent * entry;
 	struct dirent * result;
@@ -159,13 +172,10 @@ void LIST(int clientsd , struct packet RECEIVE_MESSAGE){
 	free(entry);
 	closedir(dirp);
 	*/
-	LS_REPLY.length = 10 +strlen(payload)+1;
-	MESSAGE_TO_CLIENT(clientsd,LS_REPLY,payload);
-	
+	LS_REPLY.length = 10 + strlen(payload) ;
+	MESSAGE_TO_CLIENT(clientsd, LS_REPLY, payload);
 }
 //List
-
-
 
 int main(int argc, char **argv)
 {
@@ -211,17 +221,21 @@ int main(int argc, char **argv)
 	}
 	printf("RECEIVED INFO: \n");
 	display_header(request_packet.header);
+
 	/* my Code*/
-	if((unsigned char)request_packet.header.type==0xA1){
+	if ((unsigned char)request_packet.header.type == 0xA1)
+	{
 		printf("The listing function starts\n");
 
 		//srequest_packet = realloc(request_packet,sizeof(char) * (request_packet.header.length))
-		LIST(client_sd,request_packet);
-	} else {
+		LIST(client_sd, request_packet);
+	}
+	else
+	{
 		printf("There is an error");
 	}
 	/* my Code */
-	
+
 	// if (strlen(buff) != 0)
 	// 	printf("%s\n", buff);
 
@@ -229,12 +243,6 @@ int main(int argc, char **argv)
 	// {
 	// 	close(client_sd);
 	// }
-	
-
 	close(sd);
 	return 0;
 }
-
-
-
-

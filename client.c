@@ -69,6 +69,15 @@ int recvn(int sd, void *buf, int buf_len)
 	return buf_len;
 }
 
+int check_myftp(unsigned char ptc[])
+{
+	if ((ptc[0] != 'm') || (ptc[1] != 'y') || (ptc[2] != 'f') || (ptc[3] != 't') || (ptc[4] != 'p'))
+	{
+		return -1;
+	}
+	return 0;
+}
+
 void quitWithUsageMsg()
 {
 	printf("Usage: ./myftpclient <server ip addr> <server port> <list|get|put> <file>\n");
@@ -76,8 +85,6 @@ void quitWithUsageMsg()
 }
 
 void myftpList(int sd){
-	//Work here
-
 	//Construct List Request
 	struct message_s list_request; 
 	memcpy(list_request.protocol,  (unsigned char[]){ 'm', 'y', 'f', 't', 'p' }, 5); 
@@ -95,14 +102,14 @@ void myftpList(int sd){
 	int len;
 	struct packet list_reply;
 	int totalsize=0;
-	if((len=recvn(sd,&list_reply,10))<0){
+	if((len=recvn(sd,&list_reply,sizeof(struct message_s)))<0){
 		printf("Send error: %s (Errno:%d)\n",strerror(errno),errno);
 		return;
 	}
 	if(len==0)
 		return;
 	if(list_reply.header.length > 10){
-		printf("---file list start---");
+		printf("---file list start---\n");
 		char payload[Buffer_Size+1];
 		while(1){
 			memset(&payload,0,Buffer_Size+1);
@@ -116,7 +123,7 @@ void myftpList(int sd){
 				break;
 		}
 		
-		printf("----- file list end -----\n");
+		printf("---file list end---\n");
 	}
 	/* my Code */
 
@@ -127,6 +134,30 @@ void myftpList(int sd){
 void myftpGet(int sd, char* filename){
 	//Work here
 	printf("Get (%s)\n", filename);
+
+	//Construct GET Request
+	struct message_s get_request; 
+	memcpy(get_request.protocol,  (unsigned char[]){ 'm', 'y', 'f', 't', 'p' }, 5); 
+	get_request.type = 0xB1;
+	get_request.length = sizeof(struct message_s) + strlen(filename) + 1;
+	struct packet get_request_packet;
+	get_request_packet.header = get_request;
+
+	//Send GET Request 
+	if(sendn(sd, &get_request_packet,get_request_packet.header.length) < 0){
+		printf("Send Error: %s (Errno:%d)\n", strerror(errno), errno);
+		exit(0);
+	}
+
+	//Receive GET Reply
+	struct packet get_reply;
+	int len;
+	if((len = recvn(sd, &get_request, sizeof(struct message_s))) < 0){
+		printf("Send error: %s (Errno:%d)\n",strerror(errno),errno);
+		exit(0);
+	}
+
+
 }
 
 void myftpPut(int sd, char* filename){
