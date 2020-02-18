@@ -125,7 +125,6 @@ void myftpList(int sd){
 		
 		printf("---file list end---\n");
 	}
-	/* my Code */
 
 	printf("List Request Sent.\n");
 	return;
