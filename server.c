@@ -8,9 +8,18 @@
 #include <netinet/in.h>
 #include <stddef.h>
 #include <dirent.h>
+#include <pthread.h>
 
+//Global Datas
 #define PORT 12345
+#define no_of_threads 10
+#define Buffer_Size 256
+pthread_t tid[no_of_threads];
+int tid_i=0;
+int client_sd[no_of_threads];
+int global[no_of_threads];
 
+// Global Structures
 struct message_s
 {
 	unsigned char protocol[5]; /* protocol string (5 bytes) */
@@ -156,7 +165,6 @@ void LIST(int clientsd, struct packet RECEIVE_MESSAGE)
 		readdir_r(dirp,entry,&result);
 		printf("After read");
 		break;
-		/*
 		if(!result)
 			break;
 		else{
@@ -175,6 +183,54 @@ void LIST(int clientsd, struct packet RECEIVE_MESSAGE)
 	LS_REPLY.length = 10 + strlen(payload) ;
 	MESSAGE_TO_CLIENT(clientsd, LS_REPLY, payload);
 }
+void* rec_mess(void* input){
+	int len;
+	struct packet* Receive_Message;
+	Receive_Message = malloc(sizeof(char)*10);
+	while(1){
+		int totalsize=0;
+		if((len = recvn(client_sd[* ((int *)input)],&Receive_Message->header,10))<0){
+			printf("Send error: %s (Errno:%d)\n",strerror(errno),errno);
+			pthread_exit(NULL);
+		}
+		if(len == 0)	//client terminates
+			pthread_exit(NULL);
+		if(Receive_Message->header.length>10){ 
+			char buffer[Buffer_Size + 1];
+		}
+		if(Receive_Message->header.length>10){ //receive payload
+			char recbuf[Buffer_Size+1];
+			//Buffer_Size+1 because strcat needs \0 int char array to work,+1 for \0 
+			Receive_Message = realloc(Receive_Message,sizeof(char) * (Receive_Message->header.length));
+			while(1){
+				memset(&recbuf,0,Buffer_Size+1);
+				if((len = recv(client_sd[* ((int *) input)],&recbuf, Buffer_Size,0)) < 0){
+					break;
+			}
+			if(totalsize==0)
+				strcpy(Receive_Message->payload,recbuf);
+			else
+				strcat(Receive_Message->payload,recbuf);
+			totalsize+=len;
+			if(Receive_Message->header.length-10 <= totalsize)
+				break;
+			}
+		}
+			if((unsigned char)Receive_Message->header.type == 0xA1){ //LIST
+				LIST(client_sd[* ((int *) input)],*Receive_Message);
+			}
+			if((unsigned char)Receive_Message->header.type == 0xA7){ //GET
+				//GET(client_sd[* ((int *) input)],*Receive_Message);
+				printf("Get");
+			}
+			if((unsigned char)Receive_Message->header.type == 0xA9){ //PUT
+				//PUT(client_sd[* ((int *) input)],*Receive_Message);
+				printf("Put");
+			}
+
+		}
+	free(Receive_Message);
+}
 //List
 
 int main(int argc, char **argv)
@@ -187,7 +243,7 @@ int main(int argc, char **argv)
 		perror("setsockopt");
 		exit(1);
 	}
-	int client_sd;
+	//int client_sd;
 	struct sockaddr_in server_addr;
 	struct sockaddr_in client_addr;
 	memset(&server_addr, 0, sizeof(server_addr));
@@ -204,45 +260,25 @@ int main(int argc, char **argv)
 		printf("listen error: %s (Errno:%d)\n", strerror(errno), errno);
 		exit(0);
 	}
-	int addr_len = sizeof(client_addr);
-	if ((client_sd = accept(sd, (struct sockaddr *)&client_addr, &addr_len)) < 0)
-	{
-		printf("accept erro: %s (Errno:%d)\n", strerror(errno), errno);
-		exit(0);
+	while(1){
+		if(tid_i==no_of_threads){
+			int j;
+			for(j=0;j<no_of_threads;j++)
+				pthread_join(tid[j], NULL);
+			tid_i=0;
+		}
+		struct sockaddr_in client_addr;
+		int addr_len = sizeof(client_addr);
+
+		if(( client_sd[tid_i] = accept(sd,(struct sockaddr *) &client_addr,&addr_len))<0){
+			printf("accept error: %s (Errno:%d)\n",(char *)strerror(errno),errno);
+			exit(0);
+		}
+
+		global[tid_i]=tid_i;
+		pthread_create(&tid[tid_i], NULL, rec_mess, &(global[tid_i]));
+		tid_i++;
+
 	}
-
-	struct packet request_packet;
-	int len;
-	//Receive Request
-	if ((len = recvn(client_sd, &request_packet.header, sizeof(struct message_s))) < 0)
-	{
-		printf("receive error: %s (Errno:%d)\n", strerror(errno), errno);
-		exit(0);
-	}
-	printf("RECEIVED INFO: \n");
-	display_header(request_packet.header);
-
-	/* my Code*/
-	if ((unsigned char)request_packet.header.type == 0xA1)
-	{
-		printf("The listing function starts\n");
-
-		//srequest_packet = realloc(request_packet,sizeof(char) * (request_packet.header.length))
-		LIST(client_sd, request_packet);
-	}
-	else
-	{
-		printf("There is an error");
-	}
-	/* my Code */
-
-	// if (strlen(buff) != 0)
-	// 	printf("%s\n", buff);
-
-	// if (strcmp("exit", buff) == 0)
-	// {
-	// 	close(client_sd);
-	// }
-	close(sd);
 	return 0;
 }
