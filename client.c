@@ -9,7 +9,6 @@
 #include <arpa/inet.h>
 #include <dirent.h>
 
-
 #define Buffer_Size 256
 struct message_s
 {
@@ -84,86 +83,163 @@ void quitWithUsageMsg()
 	exit(0);
 }
 
-void myftpList(int sd){
+void myftpList(int sd)
+{
 	//Construct List Request
-	struct message_s list_request; 
-	memcpy(list_request.protocol,  (unsigned char[]){ 'm', 'y', 'f', 't', 'p' }, 5); 
+	struct message_s list_request;
+	memcpy(list_request.protocol, (unsigned char[]){'m', 'y', 'f', 't', 'p'}, 5);
 	list_request.type = 0xA1;
 	list_request.length = sizeof(struct message_s);
 	struct packet list_request_packet;
 	list_request_packet.header = list_request;
 
 	//Send List Request (Packet Size = Header Size, Payload Size = 0)
-	if(sendn(sd, &list_request_packet,list_request_packet.header.length) < 0){
+	if (sendn(sd, &list_request_packet, list_request_packet.header.length) < 0)
+	{
 		printf("Send Error: %s (Errno:%d)\n", strerror(errno), errno);
-		exit(0);
+		return;
 	}
+
 	/* my Code */
 	int len;
 	struct packet list_reply;
-	int totalsize=0;
-	if((len=recvn(sd,&list_reply,sizeof(struct message_s)))<0){
-		printf("Send error: %s (Errno:%d)\n",strerror(errno),errno);
+	int totalsize = 0;
+	if ((len = recvn(sd, &list_reply, sizeof(struct message_s))) < 0)
+	{
+		printf("Send error: %s (Errno:%d)\n", strerror(errno), errno);
 		return;
-	}
-	if(len==0)
-		return;
-	if(list_reply.header.length > 10){
-		printf("---file list start---\n");
-		char payload[Buffer_Size+1];
-		while(1){
-			memset(&payload,0,Buffer_Size+1);
-			if((len = recv(sd,&payload, Buffer_Size,0)) < 0){
-				printf("Send error: %s (Errno:%d)\n",strerror(errno),errno);
-				break;
-			}
-			printf("%s",payload);
-			totalsize+=len;
-			if(list_reply.header.length-10 <= totalsize)
-				break;
-		}
-		
-		printf("---file list end---\n");
 	}
 
-	printf("List Request Sent.\n");
+	if (check_myftp(list_reply.header.protocol) < 0)
+	{
+		printf("Invalid protocol.");
+		return;
+	}
+
+	if (len == 0)
+		return;
+
+	if (list_reply.header.length > 10)
+	{
+		printf("---file list start---\n");
+		char payload[Buffer_Size];
+		while (1)
+		{
+			memset(&payload, 0, Buffer_Size);
+			if ((len = recv(sd, &payload, Buffer_Size, 0)) < 0)
+			{
+				printf("Send error: %s (Errno:%d)\n", strerror(errno), errno);
+				break;
+			}
+			printf("%s", payload);
+			totalsize += len;
+			if (list_reply.header.length - 10 <= totalsize)
+				break;
+		}
+
+		printf("---file list end---\n");
+	}
 	return;
 }
 
-void myftpGet(int sd, char* filename){
-	//Work here
+void myftpGet(int sd, char *filename)
+{
 	printf("Get (%s)\n", filename);
 
-	//Construct GET Request
-	struct message_s get_request; 
-	memcpy(get_request.protocol,  (unsigned char[]){ 'm', 'y', 'f', 't', 'p' }, 5); 
+	//Construct GET Request Message
+	struct message_s get_request;
+	memcpy(get_request.protocol, (unsigned char[]){'m', 'y', 'f', 't', 'p'}, 5);
 	get_request.type = 0xB1;
 	get_request.length = sizeof(struct message_s) + strlen(filename) + 1;
+	
 	struct packet get_request_packet;
 	get_request_packet.header = get_request;
+	memcpy(get_request_packet.payload, filename, strlen(filename) + 1);
 
-	//Send GET Request 
-	if(sendn(sd, &get_request_packet,get_request_packet.header.length) < 0){
+	//Send GET Request
+	if (sendn(sd, &get_request_packet, get_request_packet.header.length) < 0)
+	{
 		printf("Send Error: %s (Errno:%d)\n", strerror(errno), errno);
-		exit(0);
+		return;
 	}
 
 	//Receive GET Reply
 	struct packet get_reply;
 	int len;
-	if((len = recvn(sd, &get_request, sizeof(struct message_s))) < 0){
-		printf("Send error: %s (Errno:%d)\n",strerror(errno),errno);
-		exit(0);
+	//Error
+	if ((len = recvn(sd, &get_reply, sizeof(struct message_s))) < 0)
+	{
+		printf("Send error: %s (Errno:%d)\n", strerror(errno), errno);
+		return;
 	}
 
+	if (len == 0)
+	{
+		printf("0 Packet Received\n");
+		return;
+	}
 
+	//Check MYFTP
+	if (check_myftp(get_reply.header.protocol) < 0)
+	{
+		printf("Invalid Protocol\n");
+		return;
+	}
+
+	//Process Reply
+	if ((unsigned char)get_reply.header.type == 0xB2)
+	{
+		//Receive File and write to disk
+		struct packet file_data;
+		int file_data_len;
+		if ((file_data_len = recvn(sd, &file_data, sizeof(struct message_s))) < 0)
+		{
+			printf("Send Error: %s (Errno:%d)\n", strerror(errno), errno);
+			return;
+		}
+		if (file_data_len == 0)
+		{
+			printf("0 Packet Received\n");
+			return;
+		}
+		FILE *fptr = fopen(filename, "w");
+		int transfered_data_len = 0;
+		if (file_data.header.length > 10)
+		{
+			printf("File size received : %d\n", file_data.header.length - 10);
+			char payload[Buffer_Size + 1];
+			while (1)
+			{
+				memset(&payload, 0, Buffer_Size + 1);
+				if ((file_data_len = recv(sd, &payload, Buffer_Size)) < 0)
+				{
+					printf("Send error: %s (Errno:%d)\n", strerror(errno), errno);
+					break;
+				}
+				fwrite(payload,1,file_data_len,fptr);
+				transfered_data_len += file_data_len;
+				if (file_data.header.length - 10 <= transfered_data_len)
+					break;
+			}
+		}
+		fclose(fptr);
+		printf("[%s] Download Completed.\n",filename);
+	}
+	else if ((unsigned char)get_reply.header.type == 0xB3)
+	{
+		printf("File does not exist.\n");
+		return;
+	}else{
+		printf("Invalid message type.\n");
+		return;
+	}
 }
 
-void myftpPut(int sd, char* filename){
+void myftpPut(int sd, char *filename)
+{
 	//Work here
 	printf("Put (%s)\n", filename);
 }
-
 
 int main(int argc, char **argv)
 {
@@ -185,9 +261,12 @@ int main(int argc, char **argv)
 		if (argc == 5)
 		{
 			strcpy(filename, argv[4]);
-			if(strcmp(argv[3], "get") == 0){
+			if (strcmp(argv[3], "get") == 0)
+			{
 				mode = 1;
-			}else{
+			}
+			else
+			{
 				mode = 2;
 			}
 		}

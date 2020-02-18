@@ -105,22 +105,22 @@ void display_header(struct message_s header)
 }
 
 //Added List function
-void MESSAGE_TO_CLIENT(int clientsd, struct message_s Header, char *payload)
+void MESSAGE_TO_CLIENT(int clientsd, struct message_s m_header, char *payload, int payload_length)
 {
-	struct packet *SEND_MESSAGE;
-	SEND_MESSAGE = malloc(sizeof(struct message_s));
-	SEND_MESSAGE->header = Header;
+	struct packet *send_message;
+	send_message = malloc(sizeof(struct message_s));
+	send_message->header = m_header;
 	if (payload != NULL)
 	{
-		SEND_MESSAGE = realloc(SEND_MESSAGE, 10 + strlen(payload));
-		memcpy(SEND_MESSAGE->payload, payload, Header.length - 10);
+		send_message = realloc(send_message, 10 + payload_length);
+		memcpy(send_message->payload, payload, m_header.length - 10);
 	}
-	if (sendn(clientsd, SEND_MESSAGE, Header.length) < 0)
+	if (sendn(clientsd, send_message, m_header.length) < 0)
 	{
 		printf("Send error: %s (Errno:%d)\n", strerror(errno), errno);
 		exit(0);
 	}
-	free(SEND_MESSAGE);
+	free(send_message);
 }
 
 void LIST(int clientsd, struct packet RECEIVE_MESSAGE)
@@ -149,40 +149,62 @@ void LIST(int clientsd, struct packet RECEIVE_MESSAGE)
 		strcat(payload, "\n");
 	}
 	closedir(dirp);
-	//printf("\n\n readdir() found a total of %i files\n", i);
-	//printf("The payload is %s", payload);
-	/*
-	struct dirent * entry;
-	struct dirent * result;
-	int len_entry;
-	len_entry = offsetof(struct dirent, d_name)+fpathconf(dirfd(dirp),_PC_NAME_MAX)+1;
-	entry = malloc(len_entry);
-	if(!entry)
-		exit(0);
-	
-	while(1){
-		printf("Before read");
-		readdir_r(dirp,entry,&result);
-		printf("After read");
-		break;
-		if(!result)
-			break;
-		else{
-			if((strcmp(result->d_name,".")!=0) && (strcmp(result->d_name,"..")!=0)){
-				strcat(payload,result->d_name);
-				strcat(payload,"\n");
-			}
-		}
-		
-	}
-
-	
-	free(entry);
-	closedir(dirp);
-	*/
 	LS_REPLY.length = 10 + strlen(payload) ;
-	MESSAGE_TO_CLIENT(clientsd, LS_REPLY, payload);
+	MESSAGE_TO_CLIENT(clientsd, LS_REPLY, payload, strlen(payload));
 }
+
+void GET(int clientsd, struct packet RECEIVE_MESSAGE)
+{
+	//Check File Existance
+	char path[256] = "./data/";
+	strcat(path,RECEIVE_MESSAGE.payload);
+	if( access( path, F_OK ) != -1 ) {
+    	printf("[%s] Exist.\n", RECEIVE_MESSAGE.payload);
+		
+		//Construct GET Reply
+		struct message_s get_reply;
+		memcpy(get_reply.protocol, (unsigned char[]){'m', 'y', 'f', 't', 'p'}, 5);
+		get_reply.type = 0xB2;
+		get_reply.length = sizeof(struct message_s);
+		MESSAGE_TO_CLIENT(clientsd,get_reply, NULL, 0);
+
+		//Open File
+		FILE * fptr = fopen(path,"rb");
+		if(fptr==NULL){
+			printf("file open error: %s (Errno:%d)\n",(char *)strerror(errno),errno);
+			return;
+		}
+
+		//Get File Size
+		fseek(fptr,0,SEEK_END);
+		int filesize = ftell(fptr);
+		rewind(fptr);
+
+		//Send File
+		char * buffer = malloc(sizeof(char) * filesize);
+		printf("File Size To Send %lu\n",fread(buffer,sizeof(char),filesize,fptr));
+		struct message_s file_data;
+		memcpy(file_data.protocol, (unsigned char[]){'m', 'y', 'f', 't', 'p'}, 5);
+		file_data.type = 0xFF;
+		file_data.length = sizeof(struct message_s) + filesize;
+		MESSAGE_TO_CLIENT(clientsd,file_data,buffer,filesize);
+		free(buffer);
+		fclose(fptr);
+    	printf("File Transfer Completed.\n");
+
+	} else {
+    	printf("%s Does Not Exist.\n", RECEIVE_MESSAGE.payload);
+		
+		//Construct GET Reply
+		struct message_s get_reply;
+		memcpy(get_reply.protocol, (unsigned char[]){'m', 'y', 'f', 't', 'p'}, 5);
+		get_reply.type = 0xB3;
+		get_reply.length = sizeof(struct message_s);
+		MESSAGE_TO_CLIENT(clientsd,get_reply,NULL,0);
+
+	}
+}
+
 void* rec_mess(void* input){
 	int len;
 	struct packet* Receive_Message;
@@ -195,15 +217,11 @@ void* rec_mess(void* input){
 		}
 		if(len == 0)	//client terminates
 			pthread_exit(NULL);
-		if(Receive_Message->header.length>10){ 
-			char buffer[Buffer_Size + 1];
-		}
 		if(Receive_Message->header.length>10){ //receive payload
-			char recbuf[Buffer_Size+1];
-			//Buffer_Size+1 because strcat needs \0 int char array to work,+1 for \0 
+			char recbuf[Buffer_Size];
 			Receive_Message = realloc(Receive_Message,sizeof(char) * (Receive_Message->header.length));
 			while(1){
-				memset(&recbuf,0,Buffer_Size+1);
+				memset(&recbuf,0,Buffer_Size);
 				if((len = recv(client_sd[* ((int *) input)],&recbuf, Buffer_Size,0)) < 0){
 					break;
 			}
@@ -219,9 +237,8 @@ void* rec_mess(void* input){
 			if((unsigned char)Receive_Message->header.type == 0xA1){ //LIST
 				LIST(client_sd[* ((int *) input)],*Receive_Message);
 			}
-			if((unsigned char)Receive_Message->header.type == 0xA7){ //GET
-				//GET(client_sd[* ((int *) input)],*Receive_Message);
-				printf("Get");
+			if((unsigned char)Receive_Message->header.type == 0xB1){ //GET
+				GET(client_sd[* ((int *) input)],*Receive_Message);
 			}
 			if((unsigned char)Receive_Message->header.type == 0xA9){ //PUT
 				//PUT(client_sd[* ((int *) input)],*Receive_Message);
