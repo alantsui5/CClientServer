@@ -235,10 +235,101 @@ void myftpGet(int sd, char *filename)
 	}
 }
 
-void myftpPut(int sd, char *filename)
+//Added List function
+void MESSAGE_TO_SERVER(int sd, struct message_s m_header, char *payload, int payload_length)
 {
+	struct packet *send_message;
+	send_message = malloc(sizeof(struct message_s));
+	send_message->header = m_header;
+	if (payload != NULL)
+	{
+		send_message = realloc(send_message, 10 + payload_length);
+		memcpy(send_message->payload, payload, m_header.length - 10);
+	}
+	if (sendn(sd, send_message, m_header.length) < 0)
+	{
+		printf("Send error: %s (Errno:%d)\n", strerror(errno), errno);
+		exit(0);
+	}
+	free(send_message);
+}
+
+void myftpPut(int sd, char* filename){
 	//Work here
 	printf("Put (%s)\n", filename);
+	
+	// Check File existance
+	if( access(filename, F_OK ) != -1 )
+    	printf("[%s] Exist.\n", filename);
+	else {
+		printf("The File [%s] does not exist.\n",filename);
+		return;
+	}
+	//Construct Put Request
+	struct message_s put_request;
+	memcpy(put_request.protocol, (unsigned char[]){'m', 'y', 'f', 't', 'p'}, 5);
+	put_request.type = 0xC1;
+	put_request.length = sizeof(struct message_s)+strlen(filename);
+
+	struct packet put_request_packet;
+	put_request_packet.header = put_request;
+	memcpy(put_request_packet.payload, filename, strlen(filename) + 1);
+	printf("%s\n",put_request_packet.payload);
+	//Send Post Request
+	if (sendn(sd, &put_request_packet, put_request_packet.header.length) < 0)
+	{
+		printf("Send Error: %s (Errno:%d)\n", strerror(errno), errno);
+		return;
+	}
+
+	//Receive Post Reply
+	struct packet post_reply;
+	int len;
+	//Error
+	if ((len = recvn(sd, &post_reply, sizeof(struct message_s))) < 0)
+	{
+		printf("Send error: %s (Errno:%d)\n", strerror(errno), errno);
+		return;
+	}
+
+	if (len == 0)
+	{
+		printf("0 Packet Received\n");
+		return;
+	}
+
+	//Check MYFTP
+	if (check_myftp(post_reply.header.protocol) < 0)
+	{
+		printf("Invalid Protocol\n");
+		return;
+	}
+
+	//Open File
+	FILE * fptr = fopen(filename,"rb");
+	if(fptr==NULL){
+		printf("file open error: %s (Errno:%d)\n",(char *)strerror(errno),errno);
+		return;
+	}
+
+	//Get File Size
+	fseek(fptr,0,SEEK_END);
+	int filesize = ftell(fptr);
+	rewind(fptr);
+
+	//Send File
+	char * buffer = malloc(sizeof(char) * filesize);
+	printf("File Size To Send %lu\n",fread(buffer,sizeof(char),filesize,fptr));
+	struct message_s file_data;
+	memcpy(file_data.protocol, (unsigned char[]){'m', 'y', 'f', 't', 'p'}, 5);
+	file_data.type = 0xFF;
+	file_data.length = sizeof(struct message_s) + filesize;
+	MESSAGE_TO_SERVER(sd, file_data, buffer, filesize);
+
+	free(buffer);
+	fclose(fptr);
+	printf("File Transfer Completed.\n");
+		
 }
 
 int main(int argc, char **argv)

@@ -125,8 +125,6 @@ void MESSAGE_TO_CLIENT(int clientsd, struct message_s m_header, char *payload, i
 
 void LIST(int clientsd, struct packet RECEIVE_MESSAGE)
 {
-	//printf("110");
-
 	struct message_s LS_REPLY = {.protocol = {'m', 'y', 'f', 't', 'p'}, .type = 0xA2};
 	char payload[1024];
 	memset(payload, 0, 1);
@@ -152,6 +150,57 @@ void LIST(int clientsd, struct packet RECEIVE_MESSAGE)
 	LS_REPLY.length = 10 + strlen(payload) ;
 	MESSAGE_TO_CLIENT(clientsd, LS_REPLY, payload, strlen(payload));
 }
+
+void PUT(int clientsd , struct packet RECEIVE_MESSAGE){
+	printf("Put\n");
+
+	char path[256] = "./data/";
+	strcat(path,RECEIVE_MESSAGE.payload);
+	//Construct Put Reply Message
+	struct message_s put_reply;
+	memcpy(put_reply.protocol, (unsigned char[]){'m', 'y', 'f', 't', 'p'}, 5);
+	put_reply.type = 0xB1;
+	put_reply.length = sizeof(struct message_s);
+	MESSAGE_TO_CLIENT(clientsd,put_reply,NULL,0);
+	
+	//Receive File and write to disk
+	struct packet file_data;
+	int file_data_len;
+	if ((file_data_len = recvn(clientsd, &file_data, sizeof(struct message_s))) < 0)
+	{
+		printf("Send Error: %s (Errno:%d)\n", strerror(errno), errno);
+		return;
+	}
+	if (file_data_len == 0)
+	{
+		printf("0 Packet Received\n");
+		return;
+	}
+    FILE *fptr = fopen(path, "w");   
+		
+		int transfered_data_len = 0;
+		if (file_data.header.length > 10)
+		{
+			printf("File size received : %d\n", file_data.header.length - 10);
+			char payload[Buffer_Size + 1];
+			while (1)
+			{
+				memset(&payload, 0, Buffer_Size + 1);
+				if ((file_data_len = recv(clientsd, &payload, Buffer_Size, 0)) < 0)
+				{
+					printf("Send error: %s (Errno:%d)\n", strerror(errno), errno);
+					break;
+				}
+				fwrite(payload,1,file_data_len,fptr);
+				transfered_data_len += file_data_len;
+				if (file_data.header.length - 10 <= transfered_data_len)
+					break;
+			}
+		}
+		fclose(fptr);
+		printf("(%s) Upload Completed.\n",RECEIVE_MESSAGE.payload);
+	}
+
 
 void GET(int clientsd, struct packet RECEIVE_MESSAGE)
 {
@@ -218,6 +267,7 @@ void* rec_mess(void* input){
 		if(len == 0)	//client terminates
 			pthread_exit(NULL);
 		if(Receive_Message->header.length>10){ //receive payload
+
 			char recbuf[Buffer_Size];
 			Receive_Message = realloc(Receive_Message,sizeof(char) * (Receive_Message->header.length));
 			while(1){
@@ -233,6 +283,8 @@ void* rec_mess(void* input){
 			if(Receive_Message->header.length-10 <= totalsize)
 				break;
 			}
+		}else{
+			printf("No Payload");
 		}
 			if((unsigned char)Receive_Message->header.type == 0xA1){ //LIST
 				LIST(client_sd[* ((int *) input)],*Receive_Message);
@@ -240,9 +292,8 @@ void* rec_mess(void* input){
 			if((unsigned char)Receive_Message->header.type == 0xB1){ //GET
 				GET(client_sd[* ((int *) input)],*Receive_Message);
 			}
-			if((unsigned char)Receive_Message->header.type == 0xA9){ //PUT
-				//PUT(client_sd[* ((int *) input)],*Receive_Message);
-				printf("Put");
+			if((unsigned char)Receive_Message->header.type == 0xC1){ //PUT
+				PUT(client_sd[* ((int *) input)],*Receive_Message);
 			}
 
 		}
