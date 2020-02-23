@@ -12,6 +12,7 @@ void message_to_server(int sd, struct message_s m_header, char *payload, int pay
 	struct packet *send_message;
 	send_message = malloc(sizeof(struct message_s));
 	send_message->header = m_header;
+	send_message->header.length = htonl(send_message->header.length);
 	if (payload != NULL)
 	{
 		send_message = realloc(send_message, 10 + payload_length);
@@ -36,7 +37,7 @@ void client_list(int sd)
 	list_request_packet.header = list_request;
 
 	message_to_server(sd,list_request,NULL,0);
-
+	
 	int len;
 	struct packet list_reply;
 	int totalsize = 0;
@@ -60,6 +61,8 @@ void client_list(int sd)
 
 	if (len == 0)
 		return;
+
+	list_reply.header.length = ntohl(list_reply.header.length);
 
 	if (list_reply.header.length > 10)
 	{
@@ -94,16 +97,7 @@ void client_get(int sd, char *filename)
 	get_request.type = 0xB1;
 	get_request.length = sizeof(struct message_s) + strlen(filename) + 1;
 	
-	struct packet get_request_packet;
-	get_request_packet.header = get_request;
-	memcpy(get_request_packet.payload, filename, strlen(filename) + 1);
-
-	//Send GET Request
-	if (sendn(sd, &get_request_packet, get_request_packet.header.length) < 0)
-	{
-		printf("Send Error: %s (Errno:%d)\n", strerror(errno), errno);
-		return;
-	}
+	message_to_server(sd, get_request, filename,strlen(filename) + 1);
 
 	//Receive GET Reply
 	struct packet get_reply;
@@ -146,6 +140,9 @@ void client_get(int sd, char *filename)
 		}
 		FILE *fptr = fopen(filename, "w");
 		int transfered_data_len = 0;
+
+		file_data.header.length = ntohl(file_data.header.length);
+
 		if (file_data.header.length > 10)
 		{
 			printf("File size received : %d\n", file_data.header.length - 10);
@@ -191,17 +188,8 @@ void client_put(int sd, char* filename){
 	struct message_s put_request;
 	memcpy(put_request.protocol, (unsigned char[]){'m', 'y', 'f', 't', 'p'}, 5);
 	put_request.type = 0xC1;
-	put_request.length = sizeof(struct message_s)+strlen(filename);
-
-	struct packet put_request_packet;
-	put_request_packet.header = put_request;
-	memcpy(put_request_packet.payload, filename, strlen(filename) + 1);
-	//Send Post Request
-	if (sendn(sd, &put_request_packet, put_request_packet.header.length) < 0)
-	{
-		printf("Send Error: %s (Errno:%d)\n", strerror(errno), errno);
-		return;
-	}
+	put_request.length = sizeof(struct message_s)+strlen(filename)+1;
+	message_to_server(sd, put_request, filename, strlen(filename)+1);
 
 	//Receive Post Reply
 	struct packet post_reply;

@@ -16,7 +16,8 @@ void display_header(struct message_s header)
 		printf("This is MYFTP header\n");
 	}
 	printf("  Protocol : ");
-	for (int i = 0; i < sizeof(header.protocol); i++)
+	int i;
+	for (i = 0; i < sizeof(header.protocol); i++)
 	{
 		printf("%c", header.protocol[i]);
 	}
@@ -30,6 +31,7 @@ void message_to_client(int clientsd, struct message_s m_header, char *payload, i
 	struct packet *send_message;
 	send_message = malloc(sizeof(struct message_s));
 	send_message->header = m_header;
+	send_message->header.length = htonl(send_message->header.length);
 	if (payload != NULL)
 	{
 		send_message = realloc(send_message, 10 + payload_length);
@@ -124,8 +126,6 @@ void server_get(int clientsd, struct packet recv_packet)
 
 void server_put(int clientsd, struct packet recv_packet)
 {
-	printf("Put\n");
-
 	char path[256] = "./data/";
 	strcat(path, recv_packet.payload);
 	//Construct Put Reply Message
@@ -165,6 +165,9 @@ void server_put(int clientsd, struct packet recv_packet)
 	FILE *fptr = fopen(path, "w");
 
 	int transfered_data_len = 0;
+
+	file_data.header.length = ntohl(file_data.header.length);
+	
 	if (file_data.header.length > 10)
 	{
 		printf("File size received : %d\n", file_data.header.length - 10);
@@ -200,10 +203,13 @@ void *recv_message(void *input)
 			printf("Send error: %s (Errno:%d)\n", strerror(errno), errno);
 			pthread_exit(NULL);
 		}
-		if (len == 0) //client terminates
+		if (len == 0)
 			pthread_exit(NULL);
+
+		recv_packet->header.length = ntohl(recv_packet->header.length);
+		
 		if (recv_packet->header.length > 10)
-		{ //receive payload
+		{
 
 			char recbuf[Buffer_Size];
 			recv_packet = realloc(recv_packet, sizeof(char) * (recv_packet->header.length));
@@ -296,13 +302,11 @@ int main(int argc, char **argv)
 		}
 		struct sockaddr_in client_addr;
 		int addr_len = sizeof(client_addr);
-
 		if ((client_sd[tid_i] = accept(sd, (struct sockaddr *)&client_addr, &addr_len)) < 0)
 		{
 			printf("accept error: %s (Errno:%d)\n", (char *)strerror(errno), errno);
 			exit(0);
 		}
-
 		global[tid_i] = tid_i;
 		pthread_create(&tid[tid_i], NULL, recv_message, &(global[tid_i]));
 		tid_i++;
