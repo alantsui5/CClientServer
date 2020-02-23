@@ -36,8 +36,8 @@ void client_list(int sd)
 	struct packet list_request_packet;
 	list_request_packet.header = list_request;
 
-	message_to_server(sd,list_request,NULL,0);
-	
+	message_to_server(sd, list_request, NULL, 0);
+
 	int len;
 	struct packet list_reply;
 	int totalsize = 0;
@@ -47,14 +47,15 @@ void client_list(int sd)
 		return;
 	}
 
-	//Validate Message 
+	//Validate Message
 	if (check_myftp(list_reply.header.protocol) < 0)
 	{
 		printf("Invalid Protocol\n");
 		return;
 	}
 
-	if(list_reply.header.type != 0xA2){
+	if (list_reply.header.type != 0xA2)
+	{
 		printf("Invalid Message Type\n");
 		return;
 	}
@@ -96,8 +97,8 @@ void client_get(int sd, char *filename)
 	memcpy(get_request.protocol, (unsigned char[]){'m', 'y', 'f', 't', 'p'}, 5);
 	get_request.type = 0xB1;
 	get_request.length = sizeof(struct message_s) + strlen(filename) + 1;
-	
-	message_to_server(sd, get_request, filename,strlen(filename) + 1);
+
+	message_to_server(sd, get_request, filename, strlen(filename) + 1);
 
 	//Receive GET Reply
 	struct packet get_reply;
@@ -150,46 +151,50 @@ void client_get(int sd, char *filename)
 			while (1)
 			{
 				memset(&payload, 0, Buffer_Size + 1);
-				if ((file_data_len = recv(sd, &payload, Buffer_Size,0)) < 0)
+				if ((file_data_len = recv(sd, &payload, Buffer_Size, 0)) < 0)
 				{
 					printf("Send error: %s (Errno:%d)\n", strerror(errno), errno);
 					break;
 				}
-				fwrite(payload,1,file_data_len,fptr);
+				fwrite(payload, 1, file_data_len, fptr);
 				transfered_data_len += file_data_len;
 				if (file_data.header.length - 10 <= transfered_data_len)
 					break;
 			}
 		}
 		fclose(fptr);
-		printf("[%s] Download Completed.\n",filename);
+		printf("[%s] Download Completed.\n", filename);
 	}
 	else if ((unsigned char)get_reply.header.type == 0xB3)
 	{
 		printf("File does not exist.\n");
 		return;
-	}else{
+	}
+	else
+	{
 		printf("Invalid message type.\n");
 		return;
 	}
 }
 
-void client_put(int sd, char* filename){
+void client_put(int sd, char *filename)
+{
 	printf("Put (%s)\n", filename);
-	
+
 	// Check File existance
-	if( access(filename, F_OK ) != -1 )
-    	printf("[%s] Exist.\n", filename);
-	else {
-		printf("The File [%s] does not exist.\n",filename);
+	if (access(filename, F_OK) != -1)
+		printf("[%s] Exist.\n", filename);
+	else
+	{
+		printf("The File [%s] does not exist.\n", filename);
 		return;
 	}
 	//Construct Put Request
 	struct message_s put_request;
 	memcpy(put_request.protocol, (unsigned char[]){'m', 'y', 'f', 't', 'p'}, 5);
 	put_request.type = 0xC1;
-	put_request.length = sizeof(struct message_s)+strlen(filename)+1;
-	message_to_server(sd, put_request, filename, strlen(filename)+1);
+	put_request.length = sizeof(struct message_s) + strlen(filename) + 1;
+	message_to_server(sd, put_request, filename, strlen(filename) + 1);
 
 	//Receive Post Reply
 	struct packet post_reply;
@@ -207,33 +212,35 @@ void client_put(int sd, char* filename){
 		return;
 	}
 
-	//Validate Message 
+	//Validate Message
 	if (check_myftp(post_reply.header.protocol) < 0)
 	{
 		printf("Invalid Protocol\n");
 		return;
 	}
 
-	if(post_reply.header.type != 0xC2){
+	if (post_reply.header.type != 0xC2)
+	{
 		printf("Invalid Message Type\n");
 		return;
 	}
 
 	//Open File
-	FILE * fptr = fopen(filename,"rb");
-	if(fptr==NULL){
-		printf("file open error: %s (Errno:%d)\n",(char *)strerror(errno),errno);
+	FILE *fptr = fopen(filename, "rb");
+	if (fptr == NULL)
+	{
+		printf("file open error: %s (Errno:%d)\n", (char *)strerror(errno), errno);
 		return;
 	}
 
 	//Get File Size
-	fseek(fptr,0,SEEK_END);
+	fseek(fptr, 0, SEEK_END);
 	int filesize = ftell(fptr);
 	rewind(fptr);
 
 	//Send File
-	char * buffer = malloc(sizeof(char) * filesize);
-	printf("File Size To Send %lu\n",fread(buffer,sizeof(char),filesize,fptr));
+	char *buffer = malloc(sizeof(char) * filesize);
+	printf("File Size To Send %lu\n", fread(buffer, sizeof(char), filesize, fptr));
 	struct message_s file_data;
 	memcpy(file_data.protocol, (unsigned char[]){'m', 'y', 'f', 't', 'p'}, 5);
 	file_data.type = 0xFF;
@@ -243,7 +250,6 @@ void client_put(int sd, char* filename){
 	free(buffer);
 	fclose(fptr);
 	printf("File Transfer Completed.\n");
-		
 }
 
 int main(int argc, char **argv)

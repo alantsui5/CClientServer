@@ -167,7 +167,7 @@ void server_put(int clientsd, struct packet recv_packet)
 	int transfered_data_len = 0;
 
 	file_data.header.length = ntohl(file_data.header.length);
-	
+
 	if (file_data.header.length > 10)
 	{
 		printf("File size received : %d\n", file_data.header.length - 10);
@@ -207,10 +207,9 @@ void *recv_message(void *input)
 			pthread_exit(NULL);
 
 		recv_packet->header.length = ntohl(recv_packet->header.length);
-		
+
 		if (recv_packet->header.length > 10)
 		{
-
 			char recbuf[Buffer_Size];
 			recv_packet = realloc(recv_packet, sizeof(char) * (recv_packet->header.length));
 			while (1)
@@ -233,6 +232,7 @@ void *recv_message(void *input)
 		{
 			//printf("No Payload");
 		}
+
 		//Validate Message
 		if (check_myftp(recv_packet->header.protocol) < 0)
 		{
@@ -244,11 +244,11 @@ void *recv_message(void *input)
 		{
 			server_list(client_sd[*((int *)input)], *recv_packet);
 		}
-		if ((unsigned char)recv_packet->header.type == 0xB1)
+		else if ((unsigned char)recv_packet->header.type == 0xB1)
 		{
 			server_get(client_sd[*((int *)input)], *recv_packet);
 		}
-		if ((unsigned char)recv_packet->header.type == 0xC1)
+		else if ((unsigned char)recv_packet->header.type == 0xC1)
 		{
 			server_put(client_sd[*((int *)input)], *recv_packet);
 		}
@@ -276,7 +276,6 @@ int main(int argc, char **argv)
 	}
 	//int client_sd;
 	struct sockaddr_in server_addr;
-	struct sockaddr_in client_addr;
 	memset(&server_addr, 0, sizeof(server_addr));
 	server_addr.sin_family = AF_INET;
 	server_addr.sin_addr.s_addr = htonl(INADDR_ANY);
