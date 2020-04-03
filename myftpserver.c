@@ -14,38 +14,6 @@ void quit_with_usage_msg()
 	exit(0);
 }
 
-int getServerBlockSize(char *filename)
-{
-	FILE *fptr = fopen(filename, "rb");
-	if (fptr == NULL)
-	{
-		printf("file open error: %s (Errno:%d)\n", (char *)strerror(errno), errno);
-		return 0;
-	}
-	fseek(fptr, 9, SEEK_SET);
-	char num[5];
-	fread(&num, sizeof(char),4,fptr);
-	fclose(fptr);
-	int size=atoi(num);
-	return size;
-}
-
-int getServerPort(char *filename)
-{
-	FILE *fptr = fopen(filename, "rb");
-	if (fptr == NULL)
-	{
-		printf("file open error: %s (Errno:%d)\n", (char *)strerror(errno), errno);
-		return 0;
-	}
-	fseek(fptr, 15, SEEK_SET);
-	char num[6];
-	fread(&num, sizeof(char),5,fptr);
-	fclose(fptr);
-	int size=atoi(num);
-	return size;
-}
-
 void display_header(struct message_s header)
 {
 	//Display header information
@@ -304,10 +272,12 @@ int main(int argc, char **argv)
 	{
 		quit_with_usage_msg();
 	}
-	int blockSize = getServerBlockSize(argv[1]);
-	int port = getServerPort(argv[1]);
-	
-	
+
+	//Get Server Config
+  	FILE* fptr = fopen (argv[1], "r");
+  	int n,k,sid,blockSize,port;
+  	fscanf(fptr, "%d %d %d %d %d" ,&n, &k, &sid, &blockSize, &port);
+
 	int sd = socket(AF_INET, SOCK_STREAM, 0);
 	//Reusable port
 	long val = 1;
