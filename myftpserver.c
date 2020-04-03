@@ -8,6 +8,44 @@ int tid_i = 0;
 int client_sd[no_of_threads];
 int global[no_of_threads];
 
+void quit_with_usage_msg()
+{
+	printf("Usage: ./myftpserver serverconfig.txt`\n");
+	exit(0);
+}
+
+int getServerBlockSize(char *filename)
+{
+	FILE *fptr = fopen(filename, "rb");
+	if (fptr == NULL)
+	{
+		printf("file open error: %s (Errno:%d)\n", (char *)strerror(errno), errno);
+		return 0;
+	}
+	fseek(fptr, 9, SEEK_SET);
+	char num[5];
+	fread(&num, sizeof(char),4,fptr);
+	fclose(fptr);
+	int size=atoi(num);
+	return size;
+}
+
+int getServerPort(char *filename)
+{
+	FILE *fptr = fopen(filename, "rb");
+	if (fptr == NULL)
+	{
+		printf("file open error: %s (Errno:%d)\n", (char *)strerror(errno), errno);
+		return 0;
+	}
+	fseek(fptr, 15, SEEK_SET);
+	char num[6];
+	fread(&num, sizeof(char),5,fptr);
+	fclose(fptr);
+	int size=atoi(num);
+	return size;
+}
+
 void display_header(struct message_s header)
 {
 	//Display header information
@@ -260,12 +298,16 @@ int main(int argc, char **argv)
 {
 	if (argc != 2)
 	{
-		printf("Usage: ./myftpserver PORT_NUMBER\n");
-		exit(0);
+		quit_with_usage_msg();
 	}
-
-	int port = atoi(argv[1]);
-
+	if ((strcmp(argv[1], "serverconfig.txt")) != 0 )
+	{
+		quit_with_usage_msg();
+	}
+	int blockSize = getServerBlockSize(argv[1]);
+	int port = getServerPort(argv[1]);
+	
+	
 	int sd = socket(AF_INET, SOCK_STREAM, 0);
 	//Reusable port
 	long val = 1;
@@ -310,5 +352,6 @@ int main(int argc, char **argv)
 		pthread_create(&tid[tid_i], NULL, recv_message, &(global[tid_i]));
 		tid_i++;
 	}
+	
 	return 0;
 }
