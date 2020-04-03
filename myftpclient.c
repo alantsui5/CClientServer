@@ -3,8 +3,45 @@
 
 void quit_with_usage_msg()
 {
-	printf("Usage: ./myftpclient <server ip addr> <server port> <list|get|put> <file>\n");
+	printf("Usage: ./myftpclient clientconfig.txt <list|get|put> <file>\n");
 	exit(0);
+}
+
+void getData(char *filename, int *n, int *k, int *blockSize, char ipAddress[5][15], int port[5])
+{
+
+    FILE *fptr = fopen(filename, "rb");
+    if (fptr == NULL)
+    {
+        printf("file open error: %s (Errno:%d)\n", (char *)strerror(errno), errno);
+        return;
+    }
+    fseek(fptr, 0, SEEK_END);
+    int filesize = ftell(fptr);
+    rewind(fptr);
+    char *buffer = malloc(sizeof(char) * filesize);
+    char serverData[8][255];
+    int i = 0;
+    while ((!feof(fptr)) && i < 8)
+    {
+        fscanf(fptr, "%s", buffer);
+        strcpy(serverData[i], buffer);
+        i++;
+    }
+    fclose(fptr);
+
+    int index = (strchr(serverData[3], ':')) - serverData[3];
+
+    *n = atoi(serverData[0]);
+    *k = atoi(serverData[1]);
+    *blockSize = atoi(serverData[2]);
+    for (int i = 0; i < 5; i++)
+    {
+        memcpy(ipAddress[i], serverData[i + 3], index);
+        char tem[6];
+        memcpy(tem, serverData[i + 3] + index + 1, 5);
+        port[i] = atoi(tem);
+    }
 }
 
 void message_to_server(int sd, struct message_s m_header, char *payload, int payload_length)
@@ -262,17 +299,17 @@ int main(int argc, char **argv)
 	char filename[255];
 
 	//Input Checking
-	if (argc < 4)
+	if ((argc < 3) || (strcmp(argv[1], "clientconfig.txt")) != 0 )
 	{
 		quit_with_usage_msg();
 	}
 
-	if ((strcmp(argv[3], "get")) == 0 || (strcmp(argv[3], "put") == 0))
+	if ((strcmp(argv[2], "get")) == 0 || (strcmp(argv[2], "put") == 0))
 	{
-		if (argc == 5)
+		if (argc == 4)
 		{
-			strcpy(filename, argv[4]);
-			if (strcmp(argv[3], "get") == 0)
+			strcpy(filename, argv[3]);
+			if (strcmp(argv[2], "get") == 0)
 			{
 				mode = 1;
 			}
@@ -286,7 +323,7 @@ int main(int argc, char **argv)
 			quit_with_usage_msg();
 		}
 	}
-	else if ((strcmp(argv[3], "list")) == 0)
+	else if ((strcmp(argv[2], "list")) == 0)
 	{
 		mode = 0;
 	}
@@ -294,14 +331,20 @@ int main(int argc, char **argv)
 	{
 		quit_with_usage_msg();
 	}
-
+	char ipAddress[5][15];
+    memset(ipAddress, 0, sizeof(ipAddress));
+    int port[5];
+    memset(port, 0, sizeof(port));
+    int n,k,blockSize;
+    getData(argv[1], &n, &k, &blockSize, ipAddress, port);
+	
 	//Connection Setup
 	int sd = socket(AF_INET, SOCK_STREAM, 0);
 	struct sockaddr_in server_addr;
 	memset(&server_addr, 0, sizeof(server_addr));
 	server_addr.sin_family = AF_INET;
-	server_addr.sin_addr.s_addr = inet_addr(argv[1]);
-	server_addr.sin_port = htons(atoi(argv[2]));
+	server_addr.sin_addr.s_addr = inet_addr(ipAddress[0]);
+	server_addr.sin_port = htons(port[0]);
 	if (connect(sd, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0)
 	{
 		printf("connection error: %s (Errno:%d)\n", strerror(errno), errno);
@@ -323,5 +366,6 @@ int main(int argc, char **argv)
 	}
 
 	close(sd);
+	
 	return 0;
 }
